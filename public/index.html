@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reader</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="bar">
+    <form id="form" class="bar__form">
+      <input id="url" type="url" placeholder="Paste article URL..." autocomplete="off" required>
+      <button id="go" type="submit">Read</button>
+    </form>
+    <select id="fontSize" title="Text size">
+      <option value="16">Small</option>
+      <option value="19" selected>Medium</option>
+      <option value="23">Large</option>
+      <option value="28">X-Large</option>
+    </select>
+    <select id="saveFormat" title="Save format">
+      <option value="txt">.txt</option>
+      <option value="md">.md</option>
+      <option value="html">.html</option>
+    </select>
+    <button id="saveAs" type="button" disabled>Save As...</button>
+  </header>
+
+  <main id="view">
+    <p class="hint">Paste a link above and click Read.</p>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
