@@ -1,11 +1,24 @@
 const express = require('express');
 const { JSDOM } = require('jsdom');
 const { Readability } = require('@mozilla/readability');
+const { chromium } = require('playwright');
 const dns = require('dns').promises;
 const net = require('net');
 const path = require('path');
 const fs = require('fs');
 const { exec, execFile } = require('child_process');
+
+// A real headless Chromium instance, so requests look and behave like an
+// actual browser (TLS/HTTP2 fingerprint, JS execution, full header set)
+// instead of a hand-labeled HTTP request - sites that 403 plain fetches
+// generally let this through. Launched once and reused across requests.
+let browserPromise = null;
+function getBrowser() {
+  if (!browserPromise) {
+    browserPromise = chromium.launch({ args: ['--disable-blink-features=AutomationControlled'] });
+  }
+  return browserPromise;
+}
 
 const app = express();
 const PORT = process.env.PORT || 4173;
@@ -122,29 +135,35 @@ app.get('/api/extract', async (req, res) => {
     return res.status(400).json({ error: 'Missing url parameter.' });
   }
 
+  let context;
   try {
     const url = await assertSafeUrl(target);
 
-    const response = await fetch(url.toString(), {
-      redirect: 'follow',
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
-        Accept: 'text/html,application/xhtml+xml',
-      },
-      signal: AbortSignal.timeout(15000),
+    const browser = await getBrowser();
+    context = await browser.newContext({
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36',
+      locale: 'en-US',
+      viewport: { width: 1280, height: 900 },
+    });
+    const page = await context.newPage();
+
+    const response = await page.goto(url.toString(), {
+      waitUntil: 'load',
+      timeout: 15000,
     });
 
-    if (!response.ok) {
-      return res.status(502).json({ error: `The site responded with ${response.status} ${response.statusText}.` });
+    if (!response || !response.ok()) {
+      const status = response ? response.status() : 0;
+      return res.status(502).json({ error: `The site responded with ${status || 'no response'}.` });
     }
 
-    const contentType = response.headers.get('content-type') || '';
+    const contentType = response.headers()['content-type'] || '';
     if (!contentType.includes('html')) {
       return res.status(415).json({ error: 'That URL does not point to an HTML page.' });
     }
 
-    const html = await response.text();
+    const html = await page.content();
     const dom = new JSDOM(html, { url: url.toString() });
 
     const reader = new Readability(dom.window.document);
@@ -168,14 +187,17 @@ app.get('/api/extract', async (req, res) => {
   } catch (err) {
     const message = err.name === 'TimeoutError' ? 'The request timed out.' : err.message || 'Failed to extract article.';
     res.status(500).json({ error: message });
+  } finally {
+    if (context) await context.close();
   }
 });
 
 // The app window is a separate process from this server, so it can't be
 // closed by killing a parent - the page tells us to quit via sendBeacon
 // when it unloads (fires reliably even mid page-teardown, unlike fetch).
-app.post('/api/quit', (req, res) => {
+app.post('/api/quit', async (req, res) => {
   res.sendStatus(204);
+  if (browserPromise) await (await browserPromise).close().catch(() => {});
   setTimeout(() => process.exit(0), 50);
 });
 

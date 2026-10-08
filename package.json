@@ -7,15 +7,17 @@
   "bin": "server.js",
   "scripts": {
     "start": "node server.js",
-    "build": "pkg . --target node22-win-x64 --output dist/Reader.exe && node -e \"require('fs').copyFileSync('Reader.vbs','dist/Reader.vbs')\""
+    "build": "pkg . --target node22-win-x64 --output dist/Reader.exe && node_modules\\rcedit\\bin\\rcedit-x64.exe dist/Reader.exe --set-icon Reader.ico && node -e \"require('fs').copyFileSync('Reader.vbs','dist/Reader.vbs')\""
   },
   "dependencies": {
     "@mozilla/readability": "^0.5.0",
     "express": "^4.19.2",
-    "jsdom": "^24.1.0"
+    "jsdom": "^24.1.0",
+    "playwright": "^1.64.0"
   },
   "devDependencies": {
-    "@yao-pkg/pkg": "^6.22.0"
+    "@yao-pkg/pkg": "^6.22.0",
+    "rcedit": "^5.0.2"
   },
   "pkg": {
     "assets": [
